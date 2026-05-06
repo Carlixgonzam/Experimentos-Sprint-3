@@ -42,12 +42,15 @@ INSTALLED_APPS = [
     # Internal apps
     'monitor_trafico',
     'monitor_servicios',
-    'generador_reportes',
+    'generador_reportes.apps.GeneradorReportesConfig',
     'recolector_inventarios',
+    'api_gateway',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Monitor de Tráfico — registra y evalúa cada request (Rate Limiting / DoS)
+    'monitor_trafico.middleware.TrafficMonitorMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -151,3 +154,20 @@ DATABASES = {
 # MongoDB connection settings (consumed by recolector_inventarios via pymongo)
 MONGO_URI = 'mongodb://localhost:27017/'
 MONGO_DB_NAME = 'inventario_mongo'
+
+# =============================================================================
+# EXPERIMENTO ASR DE DISPONIBILIDAD — Heartbeat + Active Redundancy
+# =============================================================================
+
+# Instancias lógicas del Generador de Reportes que participan en el experimento.
+# En AWS, cada nombre correspondería a una instancia EC2/ECS diferente.
+REPORT_GENERATOR_INSTANCES = [
+    'generador_reportes_1',
+    'generador_reportes_2',
+]
+
+# Frecuencia de envío de heartbeats (segundos).
+# Con 0.2 s de intervalo y umbral de 0.8 s → detección garantizada < 1 s (ASR1).
+HEARTBEAT_INTERVAL_SECONDS = 0.2
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

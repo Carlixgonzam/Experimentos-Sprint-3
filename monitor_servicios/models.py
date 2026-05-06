@@ -7,7 +7,7 @@ class ServiceRegistration(models.Model):
     """
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
-    expected_interval_seconds = models.PositiveIntegerField(default=30)
+    expected_interval_seconds = models.FloatField(default=30.0)
     is_active = models.BooleanField(default=True)
     registered_at = models.DateTimeField(auto_now_add=True)
 
