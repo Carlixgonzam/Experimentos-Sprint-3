@@ -116,18 +116,32 @@ class ReportGeneratorService:
     def _fetch_from_mongo(self, business_id: uuid.UUID) -> dict:
         """
         Lee telemetría S3 y EC2 desde MongoDB. Cada subfuente es independiente.
+
+        Si la primera llamada falla por error de conexión (no por "no hay datos"
+        para ese negocio), cortocircuitamos la segunda — para evitar pagar
+        dos timeouts cuando Mongo está caído. Crítico para el ASR2:
+        sin cortocircuito, dos timeouts de 500 ms se acumulan a > 1 s
+        y empujan la latencia total al límite.
         """
+        s3, ec2 = None, None
+        mongo_unreachable = False
+
         try:
             s3 = self._s3.get(business_id)
         except LookupError as exc:
             logger.info("Sin S3 usage para %s: %s", business_id, exc)
-            s3 = None
+            # Heurística: el mensaje "Mongo no disponible" lo emite el service
+            # cuando atrapa PyMongoError. Cualquier otro LookupError significa
+            # "este business sí existe pero no tiene datos S3" y EC2 puede
+            # tener datos por separado.
+            if 'Mongo no disponible' in str(exc):
+                mongo_unreachable = True
 
-        try:
-            ec2 = self._ec2.get(business_id)
-        except LookupError as exc:
-            logger.info("Sin EC2 usage para %s: %s", business_id, exc)
-            ec2 = None
+        if not mongo_unreachable:
+            try:
+                ec2 = self._ec2.get(business_id)
+            except LookupError as exc:
+                logger.info("Sin EC2 usage para %s: %s", business_id, exc)
 
         return {
             's3':  s3,

@@ -4,6 +4,9 @@ Orquesta los conectores y aplica la lógica de transformación / enriquecimiento
 antes de exponer los datos a las vistas o al Generador de Reportes.
 """
 import uuid
+
+from pymongo.errors import PyMongoError
+
 from .connectors import PostgresConnector, MongoConnector
 
 
@@ -87,7 +90,12 @@ class S3UsageService:
         if not self.pg.business_exists(business_id):
             raise ValueError(f"Business {business_id} no encontrado.")
 
-        doc = self.mongo.fetch_s3_usage(str(business_id))
+        try:
+            doc = self.mongo.fetch_s3_usage(str(business_id))
+        except PyMongoError as exc:
+            # Mongo caído / inalcanzable → tratar como "sin datos" para que
+            # el reporte combinado siga sirviéndose con datos parciales.
+            raise LookupError(f"Mongo no disponible para S3: {exc}") from exc
         if doc is None:
             raise LookupError(f"Sin datos S3 para {business_id}.")
 
@@ -133,7 +141,10 @@ class EC2UsageService:
         if not self.pg.business_exists(business_id):
             raise ValueError(f"Business {business_id} no encontrado.")
 
-        doc = self.mongo.fetch_ec2_usage(str(business_id))
+        try:
+            doc = self.mongo.fetch_ec2_usage(str(business_id))
+        except PyMongoError as exc:
+            raise LookupError(f"Mongo no disponible para EC2: {exc}") from exc
         if doc is None:
             raise LookupError(f"Sin datos EC2 para {business_id}.")
 

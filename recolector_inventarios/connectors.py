@@ -83,11 +83,25 @@ class MongoConnector:
         self._client = None
         self._col    = None
 
+    # Timeout corto para que un Mongo caído no bloquee al cliente
+    # — crítico para el ASR2 (latencia objetivo < 1.5 s, y el reporte hace
+    # potencialmente 2 llamadas a Mongo S3+EC2). Con 500ms peor caso son
+    # 1000ms si las dos fuentes están caídas, y el cortocircuito en
+    # `ReportGeneratorService` lo baja a ~500ms.
+    _SERVER_SELECTION_TIMEOUT_MS = 500
+    _CONNECT_TIMEOUT_MS          = 500
+    _SOCKET_TIMEOUT_MS           = 1000
+
     @property
     def col(self):
         if self._col is None:
             import pymongo
-            self._client = pymongo.MongoClient(settings.MONGO_URI)
+            self._client = pymongo.MongoClient(
+                settings.MONGO_URI,
+                serverSelectionTimeoutMS=self._SERVER_SELECTION_TIMEOUT_MS,
+                connectTimeoutMS=self._CONNECT_TIMEOUT_MS,
+                socketTimeoutMS=self._SOCKET_TIMEOUT_MS,
+            )
             db = self._client[settings.MONGO_DB_NAME]
             self._col = db[self.COLLECTION]
         return self._col
