@@ -430,21 +430,6 @@ El seed se corrió dos veces sin limpiar la DB.
 
 ## 8. Cómo continuar el trabajo
 
-### Sprint 4 — features sugeridos
-
-- **Endpoint `/api/gateway/reportes/<business_id>/` con HTTP proxy real.**
-  Hoy `_generate_report_on` invoca `ReportGeneratorService` directamente
-  (mono-proceso). En producción multi-instancia, ese método debe hacer
-  un HTTP GET al `target['url']` de la instancia sana.
-- **Replicación maestro/réplica de Postgres.** Hoy es un solo Postgres
-  remoto. Si cae, todo cae. Una réplica con failover sería el siguiente
-  ASR de disponibilidad para la capa de datos.
-- **Métricas en Prometheus + dashboard Grafana.** Los scripts ya emiten
-  JSON estructurado; solo falta exponer un `/metrics` y graficarlo.
-- **Tests de carga.** `experiments/measure_security_ratelimit.py` ya hace
-  ~100 requests; un Locust o k6 con cientos de IPs simultáneas validaría
-  el comportamiento bajo DoS real.
-
 ### Cómo agregar un test nuevo
 
 Para un test del Recolector, edita
