@@ -34,13 +34,7 @@ class USDConsumptionService:
 
         # Enriquecimiento: calcular variación presupuestal si hay budget
         for r in records:
-            budget = r.get('assigned_budget')
-            spent  = float(r['total_usd_spent'])
-            r['budget_variance_usd'] = (
-                round(spent - float(budget), 2) if budget is not None else None
-            )
             r['total_usd_spent'] = float(r['total_usd_spent'])
-            r['assigned_budget'] = float(budget) if budget is not None else None
 
         return records
 

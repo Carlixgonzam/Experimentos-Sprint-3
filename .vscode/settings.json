@@ -7,5 +7,7 @@
     "python.analysis.extraPaths": [
         "/home/felipe/Documents/labsRobotica/lab1/ros2_ws/install/teleop_control_pkg/lib/python3.12/site-packages",
         "/opt/ros/jazzy/lib/python3.12/site-packages"
-    ]
+    ],
+    "ros.distro": "jazzy",
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

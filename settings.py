@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-$@+jmpv&75(*^h-l07s8a_a$1hk$fnoz+yshp%6nmab%(v+7mr
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*', '0.0.0.0']
 
 
 # Application definition
@@ -59,7 +59,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'core.urls'
+ROOT_URLCONF = 'urls'
 
 TEMPLATES = [
     {
@@ -76,28 +76,29 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+WSGI_APPLICATION = 'wsgi.application'
 
 
 # =============================================================================
-# DATABASES — HARDCODEADO PARA DESARROLLO
-# Cuando esté listo para producción, reemplazar cada valor por os.environ.get()
+# DATABASES - Persistencia Políglota
 # =============================================================================
 
+# --- PostgreSQL (Datos Relacionales y Financieros) ---
 DATABASES = {
     'default': {
-        'ENGINE':   'django.db.backends.postgresql',
-        'NAME':     'inventario_db',    # TODO: os.environ.get('POSTGRES_DB')
-        'USER':     'postgres',         # TODO: os.environ.get('POSTGRES_USER')
-        'PASSWORD': 'postgres',         # TODO: os.environ.get('POSTGRES_PASS')
-        'HOST':     'localhost',        # TODO: os.environ.get('POSTGRES_HOST')
-        'PORT':     '5432',             # TODO: os.environ.get('POSTGRES_PORT')
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'bite_db',
+        'USER': 'bite_user',
+        'PASSWORD': 'Bite_KISS_2026!',
+        'HOST': '100.31.110.6',  
+        'PORT': '5432',
     }
 }
 
-# MongoDB (consumido por MongoConnector en recolector_inventarios/connectors.py)
-MONGO_URI     = 'mongodb://localhost:27017/'   # TODO: os.environ.get('MONGO_URI')
-MONGO_DB_NAME = 'inventario_mongo'            # TODO: os.environ.get('MONGO_DB_NAME')
+# --- MongoDB (Datos Documentales y Telemetría) ---
+# URI de conexión para tu MongoConnector (usando PyMongo o Motor)
+MONGO_URI = "mongodb://bite_mongo_user:Mongo_KISS_2026!@100.31.110.6:27017/bite_telemetry?authSource=bite_telemetry"
+MONGO_DB_NAME = "bite_telemetry"
 
 
 # Password validation
@@ -136,24 +137,6 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# ---------------------------------------------------------------------------
-# Database overrides
-# ---------------------------------------------------------------------------
-DATABASES = {
-    # Primary relational DB (PostgreSQL)
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'inventario_db',
-        'USER': 'postgres',
-        'PASSWORD': '',
-        'HOST': 'localhost',
-        'PORT': '5432',
-    }
-}
-
-# MongoDB connection settings (consumed by recolector_inventarios via pymongo)
-MONGO_URI = 'mongodb://localhost:27017/'
-MONGO_DB_NAME = 'inventario_mongo'
 
 # =============================================================================
 # EXPERIMENTO ASR DE DISPONIBILIDAD — Heartbeat + Active Redundancy

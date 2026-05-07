@@ -64,7 +64,9 @@ class CloudGovernance(models.Model):
     """
     id_business          = models.OneToOneField(Business, on_delete=models.CASCADE,
                                                 db_column='id_business',
-                                                related_name='governance')
+                                                related_name='governance',
+                                                primary_key=True,
+                                                )
     # Tags obligatorios almacenados como JSON: {"env": "prod", "owner": "..."}
     mandatory_tags       = models.JSONField(default=dict)
     responsible_area     = models.CharField(max_length=255)
