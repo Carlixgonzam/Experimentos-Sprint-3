@@ -31,9 +31,9 @@ class PostgresConnector:
         return list(qs.values(
             'month_year',
             'total_usd_spent',
-            'currency',
-            'assigned_budget',
-            'payment_status',
+            #'currency',
+            # 'assigned_budget',
+            # 'payment_status',
         ))
 
     def fetch_cloud_governance(self, business_id: uuid.UUID) -> dict | None:
