@@ -1,42 +1,61 @@
 """
 Lógica de negocio del Monitor de Tráfico.
-Desacoplado del middleware para facilitar testing.
+Táctica: Rate Limiting — detección y bloqueo de IPs con tráfico abusivo (DoS).
 """
+from datetime import timedelta
+
+from django.db.models import Count
+from django.utils import timezone
+
+from .models import BlockedIP, RequestLog
 
 
 class TrafficMonitorService:
-    """
-    Encapsula la lógica de:
-    - Registro de peticiones
-    - Detección de umbrales (rate limiting)
-    - Bloqueo y desbloqueo de IPs
-    """
-
-    # TODO: mover a settings.py o a un modelo de configuración
-    REQUEST_THRESHOLD = 100       # peticiones máximas
-    TIME_WINDOW_SECONDS = 60      # en este intervalo de tiempo
+    REQUEST_THRESHOLD = 100
+    TIME_WINDOW_SECONDS = 60
 
     def is_blocked(self, ip_address: str) -> bool:
-        """Retorna True si la IP tiene un bloqueo activo."""
-        # TODO: implementar consulta a BlockedIP
-        raise NotImplementedError
+        return BlockedIP.objects.filter(ip_address=ip_address, is_active=True).exists()
 
     def log_request(self, ip_address: str, path: str, method: str,
                     status_code: int, user_agent: str) -> None:
-        """Persiste un RequestLog en base de datos."""
-        # TODO: guardar RequestLog; considerar escritura asíncrona (Celery / threading)
-        raise NotImplementedError
+        RequestLog.objects.create(
+            ip_address=ip_address,
+            path=path,
+            method=method,
+            status_code=status_code,
+            user_agent=user_agent,
+        )
 
     def evaluate_ip(self, ip_address: str) -> bool:
-        """
-        Evalúa si la IP supera el umbral en la ventana de tiempo.
-        Retorna True si se procedió a bloquearla.
-        """
-        # TODO: contar RequestLog por IP en la ventana temporal
-        # TODO: si supera el umbral, crear/activar BlockedIP
-        raise NotImplementedError
+        window_start = timezone.now() - timedelta(seconds=self.TIME_WINDOW_SECONDS)
+        count = RequestLog.objects.filter(
+            ip_address=ip_address,
+            timestamp__gte=window_start,
+        ).count()
+
+        if count >= self.REQUEST_THRESHOLD:
+            BlockedIP.objects.update_or_create(
+                ip_address=ip_address,
+                defaults={
+                    'is_active': True,
+                    'reason': (
+                        f"Excedió {self.REQUEST_THRESHOLD} peticiones "
+                        f"en {self.TIME_WINDOW_SECONDS}s"
+                    ),
+                },
+            )
+            return True
+        return False
 
     def unblock_ip(self, ip_address: str) -> None:
-        """Desactiva el bloqueo de una IP manualmente."""
-        # TODO: implementar
-        raise NotImplementedError
+        BlockedIP.objects.filter(ip_address=ip_address).update(is_active=False)
+
+    def get_top_ips(self, window_seconds: int = 60) -> list[dict]:
+        window_start = timezone.now() - timedelta(seconds=window_seconds)
+        return list(
+            RequestLog.objects.filter(timestamp__gte=window_start)
+            .values('ip_address')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:10]
+        )
