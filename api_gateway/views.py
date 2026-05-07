@@ -64,7 +64,15 @@ class GatewayReportView(View):
             return JsonResponse({
                 'status': 'ok',
                 'routed_to': result['routed_to'],
-                'routing_latency_ms': round(elapsed_ms, 3),
+                # `routing_decision_ms` es la métrica del ASR2 (decidir destino).
+                # `report_generation_ms` puede incluir timeouts de DB externas.
+                # `total_ms` es la suma observada en el handler.
+                'routing_decision_ms':  result['routing_decision_ms'],
+                'report_generation_ms': result['report_generation_ms'],
+                'total_ms':             round(elapsed_ms, 3),
+                # Mantengo `routing_latency_ms` para no romper integraciones
+                # existentes; es alias de `total_ms`.
+                'routing_latency_ms':   round(elapsed_ms, 3),
                 'report': result['report'],
             }, status=200)
         except RuntimeError as exc:

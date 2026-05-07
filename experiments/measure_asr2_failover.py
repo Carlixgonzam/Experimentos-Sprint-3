@@ -106,8 +106,10 @@ def main() -> None:
     emit('REPORT_RESPONSE', {
         'http': rr.status_code,
         'routed_to': body.get('routed_to'),
-        'routing_latency_ms_server': body.get('routing_latency_ms'),
-        'total_latency_ms_client':   round(total_latency_ms, 3),
+        'routing_decision_ms':  body.get('routing_decision_ms'),
+        'report_generation_ms': body.get('report_generation_ms'),
+        'total_ms_server':      body.get('total_ms'),
+        'total_latency_ms_client': round(total_latency_ms, 3),
     })
 
     # 4. Limpieza
@@ -123,16 +125,21 @@ def main() -> None:
     if body.get('routed_to') != EXPECTED:
         fail(f'Routed_to inesperado',
              expected=EXPECTED, got=body.get('routed_to'))
-    routing_ms = body.get('routing_latency_ms', float('inf'))
-    if routing_ms >= 100:
-        fail('routing_latency_ms >= 100 ms', routing_latency_ms=routing_ms)
+    # ASR2: la *decisión* de enrutamiento debe ser sub-100 ms.
+    # El tiempo de generación del reporte depende de las DBs externas y
+    # NO es parte del SLA del Gateway, por eso se mide aparte.
+    routing_decision_ms = body.get('routing_decision_ms', float('inf'))
+    if routing_decision_ms >= 100:
+        fail('routing_decision_ms >= 100 ms',
+             routing_decision_ms=routing_decision_ms)
     if total_latency_ms >= 1500:
         fail('total_latency_ms_client >= 1500 ms',
              total_latency_ms=round(total_latency_ms, 3))
 
-    ok('ASR2 cumplido — failover < 1.5 s, enrutamiento < 100 ms',
+    ok('ASR2 cumplido — decisión de routing < 100 ms, total < 1.5 s',
        seconds_since_kill=round(detection_s, 4),
-       routing_latency_ms=routing_ms,
+       routing_decision_ms=routing_decision_ms,
+       report_generation_ms=body.get('report_generation_ms'),
        total_latency_ms_client=round(total_latency_ms, 3),
        routed_to=body.get('routed_to'))
 

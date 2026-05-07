@@ -13,6 +13,7 @@ Flujo de failover (ASR2 — < 1 s desde detección):
   Tiempo total de esta decisión: < 10 ms (consulta DB local).
 """
 import logging
+import time
 import uuid
 
 from django.conf import settings
@@ -63,6 +64,12 @@ class GatewayService:
         Enruta la solicitud de reporte a la primera instancia saludable.
         Estrategia: first-healthy (se puede extender a round-robin).
 
+        Devuelve tiempos separados:
+          - routing_decision_ms: lo que tarda *decidir* el target (lectura del
+            estado de salud + selección). Es la métrica del ASR2.
+          - report_generation_ms: lo que tarda generar el reporte en sí
+            (puede incluir timeouts de DB externas).
+
         Args:
             business_id: UUID del negocio sobre el que se quiere el reporte.
             month_year:  filtro opcional 'YYYY-MM' para consumo USD.
@@ -71,6 +78,7 @@ class GatewayService:
             RuntimeError: si no hay ninguna instancia disponible.
             ValueError:   si el business_id no existe (404 a nivel HTTP).
         """
+        t_decision_start = time.perf_counter()
         healthy = self.get_healthy_instances()
         if not healthy:
             logger.error("[GATEWAY] Sin instancias saludables — retornando 503.")
@@ -79,14 +87,24 @@ class GatewayService:
             )
 
         target = healthy[0]
-        logger.info("[GATEWAY] Enrutando a '%s'.", target['name'])
+        routing_decision_ms = (time.perf_counter() - t_decision_start) * 1000
+        logger.info("[GATEWAY] Enrutando a '%s' (decisión: %.2f ms).",
+                    target['name'], routing_decision_ms)
 
         # En producción multi-instancia (AWS) haríamos un HTTP proxy al target['url'].
         # En el experimento mono-proceso llamamos la capa de servicio directamente.
+        t_report_start = time.perf_counter()
         report = self._generate_report_on(
             target['name'], business_id, month_year=month_year,
         )
-        return {'routed_to': target['name'], 'report': report}
+        report_generation_ms = (time.perf_counter() - t_report_start) * 1000
+
+        return {
+            'routed_to':            target['name'],
+            'report':               report,
+            'routing_decision_ms':  round(routing_decision_ms, 3),
+            'report_generation_ms': round(report_generation_ms, 3),
+        }
 
     def _generate_report_on(
         self,

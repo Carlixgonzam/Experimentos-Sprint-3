@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(DJANGO_SETTINGS_MODULE=settings_test python manage.py runserver 127.0.0.1:8000 --noreload)"
+    ]
+  }
+}
