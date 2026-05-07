@@ -1,0 +1,13 @@
+[project]
+name = "experimentos-sprint-3"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "django>=6.0.5",
+    "djangorestframework>=3.17.1",
+    "faker>=40.15.0",
+    "psycopg2-binary>=2.9.12",
+    "pymongo>=4.17.0",
+]

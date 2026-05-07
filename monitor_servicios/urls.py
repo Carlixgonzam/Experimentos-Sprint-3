@@ -6,7 +6,6 @@ from .views import (
     ServiceHealthView,
     StaleServicesView,
 )
-
 app_name = 'monitor_servicios'
 
 urlpatterns = [

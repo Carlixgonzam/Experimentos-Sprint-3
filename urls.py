@@ -9,22 +9,17 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     # Monitor de Tráfico — rate limiting, detección DoS
-    path('api/monitor-trafico/',
-         include('monitor_trafico.urls', namespace='monitor_trafico')),
+    path('api/monitor-trafico/', include('monitor_trafico.urls', namespace='monitor_trafico')),
 
     # Monitor de Servicios — heartbeats, detección de caídas
-    path('api/monitor-servicios/',
-         include('monitor_servicios.urls', namespace='monitor_servicios')),
+    path('api/monitor-servicios/', include('monitor_servicios.urls', namespace='monitor_servicios')),
 
     # Generador de Reportes — acceso directo (sin Gateway)
-    path('api/generador-reportes/',
-         include('generador_reportes.urls', namespace='generador_reportes')),
+    path('api/generador-reportes/', include('generador_reportes.urls', namespace='generador_reportes')),
 
     # Recolector de Inventarios
-    path('api/recolector/',
-         include('recolector_inventarios.urls', namespace='recolector_inventarios')),
+    path('api/recolector/', include('recolector_inventarios.urls', namespace='recolector_inventarios')),
 
     # API Gateway — entrada principal + experimento ASR de disponibilidad
-    path('api/gateway/',
-         include('api_gateway.urls', namespace='api_gateway')),
+    path('api/gateway/', include('api_gateway.urls', namespace='api_gateway')),
 ]

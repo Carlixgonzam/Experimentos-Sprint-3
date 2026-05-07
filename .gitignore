@@ -9,3 +9,71 @@
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# =========================
+# Entornos Virtuales y Dependencias
+# =========================
+.venv/
+venv/
+env/
+__pypackages__/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# =========================
+# Archivos Compilados de Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =========================
+# Django Específico
+# =========================
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+# Ignorar carpetas de archivos estáticos y subidas de usuarios (producción)
+media/
+staticfiles/
+
+# =========================
+# Archivos de Entorno / Credenciales (¡CRÍTICO!)
+# =========================
+.env
+.env.local
+.env.development
+.env.production
+credentials.txt
+
+# =========================
+# Pruebas y Cobertura
+# =========================
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# =========================
+# Entornos de Desarrollo (IDEs) y SO
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

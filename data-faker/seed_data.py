@@ -14,9 +14,8 @@ Cómo correrlo (desde la raíz del repo):
 
     python data-faker/seed_data.py
 
-Lee credenciales sólo desde las variables de entorno (las mismas que
-`core/settings.py`); si no están, usa los defaults de
-`setups/setup-credentials.sh` (bite_db / bite_telemetry).
+Lee credenciales desde `settings.py` en la raíz del repo (las mismas que
+usa `manage.py`).
 
 Crea 4 empresas predecibles (UUIDs all-1s, all-2s, etc.) más N empresas
 aleatorias para que tengas un set estable que probar a mano:
@@ -37,7 +36,7 @@ import django
 # Bootstrap Django desde un script que vive fuera de manage.py
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
 django.setup()
 
 from django.conf import settings  # noqa: E402
