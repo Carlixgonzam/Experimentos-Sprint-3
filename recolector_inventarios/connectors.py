@@ -71,15 +71,26 @@ class MongoConnector:
         "service":     "S3" | "EC2",
         "details":     { ... }
     }
+
+    La conexión a Mongo se abre de forma perezosa (lazy) en la primera
+    consulta — así el monolito puede arrancar y servir endpoints que NO
+    dependen de Mongo aunque Mongo esté caído.
     """
 
     COLLECTION = 'cloud_telemetry'
 
     def __init__(self):
-        import pymongo
-        self.client = pymongo.MongoClient(settings.MONGO_URI)
-        self.db     = self.client[settings.MONGO_DB_NAME]
-        self.col    = self.db[self.COLLECTION]
+        self._client = None
+        self._col    = None
+
+    @property
+    def col(self):
+        if self._col is None:
+            import pymongo
+            self._client = pymongo.MongoClient(settings.MONGO_URI)
+            db = self._client[settings.MONGO_DB_NAME]
+            self._col = db[self.COLLECTION]
+        return self._col
 
     # ------------------------------------------------------------------
     # S3
@@ -112,4 +123,7 @@ class MongoConnector:
 
     def close(self):
         """Cierra la conexión a MongoDB explícitamente."""
-        self.client.close()
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+            self._col    = None

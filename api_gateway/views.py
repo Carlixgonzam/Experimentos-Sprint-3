@@ -32,15 +32,34 @@ _gateway = GatewayService()
 @method_decorator(csrf_exempt, name='dispatch')
 class GatewayReportView(View):
     """
-    GET /api/gateway/reportes/
+    GET /api/gateway/reportes/?business_id=<uuid>&month=YYYY-MM
 
     Punto de entrada principal. Implementa Active Redundancy:
     enruta al primer generador de reportes saludable.
     """
     def get(self, request):
+        import uuid as _uuid
+
+        raw_id = request.GET.get('business_id', '').strip()
+        if not raw_id:
+            return JsonResponse(
+                {'status': 'error',
+                 'message': 'Query param `business_id` (UUID) es obligatorio.'},
+                status=400,
+            )
+        try:
+            bid = _uuid.UUID(raw_id)
+        except ValueError:
+            return JsonResponse(
+                {'status': 'error',
+                 'message': f'`business_id` no es un UUID válido: {raw_id}'},
+                status=400,
+            )
+        month_year = request.GET.get('month') or None
+
         t0 = time.perf_counter()
         try:
-            result = _gateway.route_report_request()
+            result = _gateway.route_report_request(bid, month_year=month_year)
             elapsed_ms = (time.perf_counter() - t0) * 1000
             return JsonResponse({
                 'status': 'ok',
@@ -49,7 +68,13 @@ class GatewayReportView(View):
                 'report': result['report'],
             }, status=200)
         except RuntimeError as exc:
-            return JsonResponse({'status': 'error', 'message': str(exc)}, status=503)
+            return JsonResponse(
+                {'status': 'error', 'message': str(exc)}, status=503,
+            )
+        except ValueError as exc:
+            return JsonResponse(
+                {'status': 'error', 'message': str(exc)}, status=404,
+            )
 
 
 @method_decorator(csrf_exempt, name='dispatch')

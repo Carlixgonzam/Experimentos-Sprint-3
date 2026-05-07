@@ -1,0 +1,43 @@
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = []
+
+    operations = [
+        migrations.CreateModel(
+            name='RequestLog',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True,
+                                           serialize=False, verbose_name='ID')),
+                ('ip_address', models.GenericIPAddressField()),
+                ('path', models.CharField(max_length=512)),
+                ('method', models.CharField(max_length=10)),
+                ('timestamp', models.DateTimeField(auto_now_add=True)),
+                ('status_code', models.PositiveSmallIntegerField(blank=True, null=True)),
+                ('user_agent', models.TextField(blank=True)),
+            ],
+            options={
+                'ordering': ['-timestamp'],
+            },
+        ),
+        migrations.AddIndex(
+            model_name='requestlog',
+            index=models.Index(fields=['ip_address', 'timestamp'],
+                               name='monitor_tra_ip_addr_33a375_idx'),
+        ),
+        migrations.CreateModel(
+            name='BlockedIP',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True,
+                                           serialize=False, verbose_name='ID')),
+                ('ip_address', models.GenericIPAddressField(unique=True)),
+                ('blocked_at', models.DateTimeField(auto_now_add=True)),
+                ('reason', models.TextField(blank=True)),
+                ('is_active', models.BooleanField(default=True)),
+            ],
+        ),
+    ]

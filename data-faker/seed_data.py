@@ -1,174 +1,250 @@
-import re
+"""
+Seed de datos para el experimento Sprint 3.
+
+Estrategia:
+  - PostgreSQL: poblamos vía ORM de Django para garantizar que el esquema
+    coincide con `recolector_inventarios/models.py` (incluye CloudGovernance,
+    payment_status, currency, assigned_budget, etc.).
+  - MongoDB: poblamos `cloud_telemetry` con la estructura que esperan
+    `S3UsageService` y `EC2UsageService` (buckets con size_gb / unused_days /
+    policy_violations / storage_class / last_access_date; instances con
+    cpu_utilization_avg / uptime_logs).
+
+Cómo correrlo (desde la raíz del repo):
+
+    python data-faker/seed_data.py
+
+Lee credenciales sólo desde las variables de entorno (las mismas que
+`core/settings.py`); si no están, usa los defaults de
+`setups/setup-credentials.sh` (bite_db / bite_telemetry).
+
+Crea 4 empresas predecibles (UUIDs all-1s, all-2s, etc.) más N empresas
+aleatorias para que tengas un set estable que probar a mano:
+
+  - 11111111-1111-1111-1111-111111111111  → Universidad de los Andes
+  - 22222222-2222-2222-2222-222222222222  → BITE.co (Interno)
+  - 33333333-3333-3333-3333-333333333333  → Routask AI
+  - 44444444-4444-4444-4444-444444444444  → RAS Robotics SWARM
+"""
 import os
-import time
-import psycopg2
-from pymongo import MongoClient
-import uuid
+import sys
 import random
-from faker import Faker
+import uuid
+from pathlib import Path
+
+import django
+
+# Bootstrap Django desde un script que vive fuera de manage.py
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+django.setup()
+
+from django.conf import settings  # noqa: E402
+from django.db import transaction  # noqa: E402
+from faker import Faker  # noqa: E402
+from pymongo import MongoClient  # noqa: E402
+
+from recolector_inventarios.models import (  # noqa: E402
+    Business, ConsumptionSummary, CloudGovernance,
+)
 
 fake = Faker('es_CO')
 
-def extract_credentials(filepath="credentials.txt"):
-    """Parsea el archivo txt para extraer el DSN de Postgres y la URI de Mongo."""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"¡No se encontró el archivo {filepath}! Crea el archivo con el output del bash script.")
-    
-    with open(filepath, 'r', encoding='utf-8') as f:
-        content = f.read()
+# ---------------------------------------------------------------------------
+# Configuración del seed
+# ---------------------------------------------------------------------------
+EMPRESAS_FIJAS = [
+    {'id': uuid.UUID('11111111-1111-1111-1111-111111111111'),
+     'name': 'Universidad de los Andes', 'nit': '860007386-1'},
+    {'id': uuid.UUID('22222222-2222-2222-2222-222222222222'),
+     'name': 'BITE.co (Interno)',       'nit': '901234567-8'},
+    {'id': uuid.UUID('33333333-3333-3333-3333-333333333333'),
+     'name': 'Routask AI',              'nit': '900000000-1'},
+    {'id': uuid.UUID('44444444-4444-4444-4444-444444444444'),
+     'name': 'RAS Robotics SWARM',      'nit': '900000000-2'},
+]
+EMPRESAS_ALEATORIAS = int(os.environ.get('SEED_EXTRA_COMPANIES', '50'))
+MESES_HISTORICO = (
+    [f'2025-{m:02d}' for m in range(6, 13)] +
+    [f'2026-{m:02d}' for m in range(1, 6)]
+)
 
-    try:
-        # Extraer credenciales Postgres usando Regex
-        db_name = re.search(r"'NAME':\s*'([^']+)'", content).group(1)
-        db_user = re.search(r"'USER':\s*'([^']+)'", content).group(1)
-        db_pass = re.search(r"'PASSWORD':\s*'([^']+)'", content).group(1)
-        db_host = re.search(r"'HOST':\s*'([^']+)'", content).group(1)
-        db_port = re.search(r"'PORT':\s*'([^']+)'", content).group(1)
-        
-        pg_dsn = f"dbname={db_name} user={db_user} password={db_pass} host={db_host} port={db_port}"
-        
-        # Extraer credencial Mongo
-        mongo_uri = re.search(r'MONGO_URI\s*=\s*"([^"]+)"', content).group(1)
-        
-        return pg_dsn, mongo_uri
-    except AttributeError as e:
-        raise ValueError("El formato de credentials.txt no coincide con el esperado.") from e
 
-def seed_databases():
-    print("🔍 Parseando credentials.txt...")
-    PG_DSN, MONGO_URI = extract_credentials()
-    
-    print("🔌 Conectando a bases de datos...")
-    pg_conn = psycopg2.connect(PG_DSN)
-    pg_cursor = pg_conn.cursor()
-    
-    mongo_client = MongoClient(MONGO_URI)
-    mongo_db = mongo_client["bite_telemetry"]
-    cloud_telemetry = mongo_db["cloud_telemetry"]
-    
-    print("🧹 Preparando y limpiando tablas en Postgres...")
-    # Crear las tablas desde cero si no existen, o reiniciarlas si ya existen
-    pg_cursor.execute("""
-        DROP TABLE IF EXISTS consumption_summary CASCADE;
-        DROP TABLE IF EXISTS businesses CASCADE;
+# ---------------------------------------------------------------------------
+# Postgres (ORM Django)
+# ---------------------------------------------------------------------------
 
-        CREATE TABLE businesses (
-            id_business UUID PRIMARY KEY,
-            name VARCHAR(255),
-            nit VARCHAR(20)
-        );
+def _build_governance_payload() -> dict:
+    """Genera tags y límites por proyecto plausibles."""
+    return {
+        'mandatory_tags': {
+            'env':   random.choice(['prod', 'staging', 'dev']),
+            'owner': fake.email(),
+            'cost_center': f'CC-{random.randint(100, 999)}',
+        },
+        'responsible_area': random.choice([
+            'Plataforma', 'Datos', 'Producto', 'Infraestructura',
+        ]),
+        'spend_limits_by_project': {
+            f'proyecto-{i}': float(random.randint(5_000, 50_000))
+            for i in range(1, random.randint(2, 5))
+        },
+    }
 
-        CREATE TABLE consumption_summary (
-            id SERIAL PRIMARY KEY,
-            id_business UUID REFERENCES businesses(id_business),
-            month_year VARCHAR(7),
-            total_usd_spent DECIMAL(12, 2)
-        );
-    """)
-    
-    print("🧹 Limpiando colecciones en Mongo...")
-    cloud_telemetry.delete_many({})
-    
-    # ==========================================
-    # 1. DEFINIR 4 EMPRESAS PREDECIBLES
-    # ==========================================
-    empresas_fijas = [
-        {"id": "11111111-1111-1111-1111-111111111111", "name": "Universidad de los Andes", "nit": "860007386-1"},
-        {"id": "22222222-2222-2222-2222-222222222222", "name": "BITE.co (Interno)", "nit": "901234567-8"},
-        {"id": "33333333-3333-3333-3333-333333333333", "name": "Routask AI", "nit": "900000000-1"},
-        {"id": "44444444-4444-4444-4444-444444444444", "name": "RAS Robotics SWARM", "nit": "900000000-2"},
+
+@transaction.atomic
+def seed_postgres(empresas: list[dict]) -> None:
+    print('[PG] Limpiando tablas...')
+    ConsumptionSummary.objects.all().delete()
+    CloudGovernance.objects.all().delete()
+    Business.objects.all().delete()
+
+    print(f'[PG] Insertando {len(empresas)} empresas + histórico financiero...')
+    businesses = [
+        Business(id_business=e['id'], name=e['name'], nit=e['nit'])
+        for e in empresas
     ]
-    
-    # ==========================================
-    # 2. GENERAR CIENTOS DE EMPRESAS ALEATORIAS
-    # ==========================================
-    TOTAL_EMPRESAS_EXTRA = 300
-    todas_las_empresas = empresas_fijas.copy()
-    
-    for _ in range(TOTAL_EMPRESAS_EXTRA):
-        todas_las_empresas.append({
-            "id": str(uuid.uuid4()),
-            "name": fake.company(),
-            "nit": f"{random.randint(800000000, 999999999)}-{random.randint(0, 9)}"
+    Business.objects.bulk_create(businesses, batch_size=200)
+
+    consumptions = []
+    governances  = []
+    for e in empresas:
+        gov_payload = _build_governance_payload()
+        governances.append(CloudGovernance(
+            id_business_id=e['id'],
+            mandatory_tags=gov_payload['mandatory_tags'],
+            responsible_area=gov_payload['responsible_area'],
+            spend_limits_by_project=gov_payload['spend_limits_by_project'],
+        ))
+        for mes in MESES_HISTORICO:
+            spent  = round(random.uniform(1_000.0, 50_000.0), 2)
+            budget = round(spent * random.uniform(0.7, 1.3), 2)
+            consumptions.append(ConsumptionSummary(
+                id_business_id=e['id'],
+                month_year=mes,
+                total_usd_spent=spent,
+                currency='USD',
+                assigned_budget=budget,
+                payment_status=random.choice(['pending', 'paid', 'overdue']),
+            ))
+
+    CloudGovernance.objects.bulk_create(governances, batch_size=200)
+    ConsumptionSummary.objects.bulk_create(consumptions, batch_size=500)
+
+    print(f'[PG] OK — {Business.objects.count()} empresas, '
+          f'{ConsumptionSummary.objects.count()} registros de consumo, '
+          f'{CloudGovernance.objects.count()} configs de gobernanza.')
+
+
+# ---------------------------------------------------------------------------
+# Mongo (telemetría)
+# ---------------------------------------------------------------------------
+
+def _build_s3_doc(business_id: str) -> dict:
+    n_buckets = random.randint(2, 6)
+    buckets = []
+    total_waste = 0
+    for _ in range(n_buckets):
+        size_gb     = random.randint(50, 5_000)
+        unused_days = random.randint(5, 400)
+        if unused_days >= 90:
+            total_waste += size_gb
+        buckets.append({
+            'name': f'{fake.domain_word()}-data',
+            'size_gb': size_gb,
+            'unused_days': unused_days,
+            'policy_violations': random.sample(
+                ['public-read', 'no-encryption', 'no-versioning'],
+                k=random.randint(0, 2),
+            ),
+            'storage_class': random.choice(
+                ['STANDARD', 'STANDARD_IA', 'GLACIER']),
+            'last_access_date': fake.date_between(
+                start_date='-1y', end_date='today').isoformat(),
+        })
+    return {
+        'business_id': business_id,
+        'service':     'S3',
+        'details': {
+            'buckets':         buckets,
+            'total_waste_gb':  total_waste,
+        },
+    }
+
+
+def _build_ec2_doc(business_id: str) -> dict:
+    n_instances = random.randint(2, 10)
+    instances = []
+    for _ in range(n_instances):
+        cpu_avg = round(random.uniform(1, 95), 1)
+        n_logs  = random.randint(100, 1_500)
+        instances.append({
+            'instance_id':         f'i-{uuid.uuid4().hex[:8]}',
+            'instance_type':       random.choice(
+                ['t3.micro', 't3.small', 'm5.large', 'c5.xlarge']),
+            'cpu_utilization_avg': cpu_avg,
+            'uptime_logs':         [random.randint(0, 24) for _ in range(n_logs)],
+        })
+    return {
+        'business_id': business_id,
+        'service':     'EC2',
+        'details': {
+            'instances': instances,
+        },
+    }
+
+
+def seed_mongo(empresas: list[dict]) -> None:
+    print(f'[Mongo] Conectando a {settings.MONGO_URI} → {settings.MONGO_DB_NAME}')
+    client = MongoClient(settings.MONGO_URI)
+    col    = client[settings.MONGO_DB_NAME]['cloud_telemetry']
+
+    print('[Mongo] Limpiando cloud_telemetry...')
+    col.delete_many({})
+
+    docs: list[dict] = []
+    for e in empresas:
+        bid = str(e['id'])
+        docs.append(_build_s3_doc(bid))
+        docs.append(_build_ec2_doc(bid))
+
+    print(f'[Mongo] Insertando {len(docs)} documentos...')
+    col.insert_many(docs)
+
+    inserted = col.count_documents({})
+    expected = len(empresas) * 2
+    if inserted != expected:
+        raise AssertionError(
+            f'Inconsistencia: {inserted} docs en Mongo, esperaba {expected}'
+        )
+    print(f'[Mongo] OK — {inserted} documentos.')
+
+    client.close()
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    random.seed(42)  # determinismo para que los experimentos sean reproducibles
+
+    empresas = list(EMPRESAS_FIJAS)
+    for _ in range(EMPRESAS_ALEATORIAS):
+        empresas.append({
+            'id':   uuid.uuid4(),
+            'name': fake.company(),
+            'nit':  f'{random.randint(800_000_000, 999_999_999)}-{random.randint(0, 9)}',
         })
 
-    print(f"🚀 Iniciando inyección de {len(todas_las_empresas)} empresas...")
-    
-    meses_historico = [f"2025-{str(m).zfill(2)}" for m in range(6, 13)] + [f"2026-{str(m).zfill(2)}" for m in range(1, 6)]
-    
-    contador_insertados = 0
-    lote_size = 50  # Cada cuántas empresas hacemos comprobación
-    
-    for emp in todas_las_empresas:
-        b_id = emp["id"]
-        
-        # --- A. INSERTAR EN POSTGRES ---
-        pg_cursor.execute(
-            "INSERT INTO businesses (id_business, name, nit) VALUES (%s, %s, %s)",
-            (b_id, emp["name"], emp["nit"])
-        )
-        
-        # Generar un año de historiales financieros en Postgres
-        for mes in meses_historico:
-            gasto = round(random.uniform(1000.0, 50000.0), 2)
-            pg_cursor.execute(
-                "INSERT INTO consumption_summary (id_business, month_year, total_usd_spent) VALUES (%s, %s, %s)",
-                (b_id, mes, gasto)
-            )
-            
-        # --- B. INSERTAR EN MONGO (Varios documentos por empresa) ---
-        docs_mongo = [
-            {
-                "business_id": b_id,
-                "service": "S3",
-                "details": {
-                    "total_waste_gb": random.randint(100, 5000),
-                    "buckets": [{"name": fake.domain_word() + "-data", "unused_days": random.randint(30, 400)}]
-                }
-            },
-            {
-                "business_id": b_id,
-                "service": "EC2",
-                "details": {
-                    "instances": [{"instance_id": f"i-{uuid.uuid4().hex[:8]}", "cpu_utilization_avg": random.randint(1, 80)} for _ in range(random.randint(2, 10))]
-                }
-            }
-        ]
-        cloud_telemetry.insert_many(docs_mongo)
-        
-        contador_insertados += 1
-        
-        # ==========================================
-        # 3. COMPROBACIONES PERIÓDICAS (Auditoría en vivo)
-        # ==========================================
-        if contador_insertados % lote_size == 0:
-            pg_conn.commit() # Asegurar que Postgres guarde el lote
-            
-            # Comprobación Postgres
-            pg_cursor.execute("SELECT COUNT(*) FROM businesses;")
-            pg_b_count = pg_cursor.fetchone()[0]
-            
-            pg_cursor.execute("SELECT COUNT(*) FROM consumption_summary;")
-            pg_c_count = pg_cursor.fetchone()[0]
-            
-            # Comprobación Mongo
-            mongo_docs = cloud_telemetry.count_documents({})
-            
-            print(f"✅ Lote {contador_insertados}/{len(todas_las_empresas)} completado.")
-            print(f"   📊 Auditoría Parcial -> Postgres: {pg_b_count} Empresas, {pg_c_count} Registros | Mongo: {mongo_docs} Documentos")
-            
-            # Validar integridad: Los docs en Mongo deben ser el doble de las empresas (porque insertamos S3 y EC2)
-            assert mongo_docs == pg_b_count * 2, "¡Alerta! Inconsistencia detectada entre Postgres y Mongo"
+    seed_postgres(empresas)
+    seed_mongo(empresas)
 
-    pg_conn.commit()
-    pg_cursor.close()
-    pg_conn.close()
-    mongo_client.close()
-    
-    print("\n🎉 ¡Población de datos y comprobaciones finalizadas con éxito!")
-    print("Empresas predecibles listas para probar en tus endpoints:")
-    for emp in empresas_fijas:
-        print(f" - {emp['name']}: {emp['id']}")
+    print('\nSeed terminado. Empresas predecibles para tus pruebas:')
+    for e in EMPRESAS_FIJAS:
+        print(f'  - {e["name"]:30s}  {e["id"]}')
 
-if __name__ == "__main__":
-    seed_databases()
+
+if __name__ == '__main__':
+    main()

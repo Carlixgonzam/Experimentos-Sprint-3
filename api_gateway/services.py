@@ -13,18 +13,20 @@ Flujo de failover (ASR2 — < 1 s desde detección):
   Tiempo total de esta decisión: < 10 ms (consulta DB local).
 """
 import logging
+import uuid
 
 from django.conf import settings
-from django.utils import timezone
 
 from monitor_servicios.services import ServiceMonitorService
+from generador_reportes.services import ReportGeneratorService
 
 logger = logging.getLogger(__name__)
 
 
 class GatewayService:
     def __init__(self) -> None:
-        self._monitor = ServiceMonitorService()
+        self._monitor   = ServiceMonitorService()
+        self._generator = ReportGeneratorService()
 
     @property
     def _instances(self) -> list[str]:
@@ -52,13 +54,22 @@ class GatewayService:
     def get_healthy_instances(self) -> list[dict]:
         return [s for s in self.get_all_status() if s['is_alive']]
 
-    def route_report_request(self) -> dict:
+    def route_report_request(
+        self,
+        business_id: uuid.UUID,
+        month_year: str | None = None,
+    ) -> dict:
         """
         Enruta la solicitud de reporte a la primera instancia saludable.
         Estrategia: first-healthy (se puede extender a round-robin).
 
+        Args:
+            business_id: UUID del negocio sobre el que se quiere el reporte.
+            month_year:  filtro opcional 'YYYY-MM' para consumo USD.
+
         Raises:
             RuntimeError: si no hay ninguna instancia disponible.
+            ValueError:   si el business_id no existe (404 a nivel HTTP).
         """
         healthy = self.get_healthy_instances()
         if not healthy:
@@ -72,18 +83,26 @@ class GatewayService:
 
         # En producción multi-instancia (AWS) haríamos un HTTP proxy al target['url'].
         # En el experimento mono-proceso llamamos la capa de servicio directamente.
-        report = self._generate_report_on(target['name'])
+        report = self._generate_report_on(
+            target['name'], business_id, month_year=month_year,
+        )
         return {'routed_to': target['name'], 'report': report}
 
-    def _generate_report_on(self, instance_name: str) -> dict:
-        """Genera el reporte en la instancia indicada (stub para experimento)."""
-        return {
-            'meta': {
-                'generated_at': timezone.now().isoformat(),
-                'generated_by': instance_name,
-                'sources': ['postgres', 'mongo'],
-            },
-            'postgres': [],
-            'mongo': [],
-            'combined': [],
-        }
+    def _generate_report_on(
+        self,
+        instance_name: str,
+        business_id: uuid.UUID,
+        month_year: str | None = None,
+    ) -> dict:
+        """
+        Genera el reporte real delegando a `ReportGeneratorService`.
+        El `instance_name` se anota en `meta.routed_to` para que el cliente
+        pueda evidenciar a qué instancia fue enrutado durante el experimento.
+        """
+        report = self._generator.generate_full_inventory_report(
+            business_id, month_year=month_year,
+        )
+        # Anotación de trazabilidad para el experimento ASR2
+        report.setdefault('meta', {})
+        report['meta']['routed_to'] = instance_name
+        return report

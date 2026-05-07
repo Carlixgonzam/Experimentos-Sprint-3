@@ -7,6 +7,8 @@ from .views import (
     StaleServicesView,
 )
 
+app_name = 'monitor_servicios'
+
 urlpatterns = [
     # Self health-check — Kong/otros te pinguean aquí
     path('health/', SelfHealthView.as_view(), name='self-health'),
