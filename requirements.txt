@@ -4,3 +4,4 @@ psycopg2-binary>=2.9,<3
 pymongo>=4.7,<5
 faker>=24
 requests>=2.31
+locust>=2.40

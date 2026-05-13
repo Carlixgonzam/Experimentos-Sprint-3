@@ -73,8 +73,9 @@ Para evidenciarlas el repo incluye:
 | Disp 02 — Degradación: HTTP 200 con Mongo caído | PASS | 545 ms (< 1500 ms) |
 | Disp 02 — Degradación: Postgres preservado | PASS | 3 records de consumption + governance |
 | Disp 02 — Degradación: Mongo en `null` | PASS | s3=null, ec2=null |
-| Seg — bloqueo de IP | PASS | request #101 con umbral 100 |
+| Seg — bloqueo de IP (smoke en serie) | PASS | request #101 con umbral 100 |
 | Seg — unblock | PASS | siguiente GET vuelve a 200 |
+| Seg — DoS concurrente (Locust 30 users, 10s) | PASS | 2,797 reqs, 2,669 → 403, max latency 3.3 s |
 | `tests/test_recolector.py` | 63/71 | 8 fails por Mongo inalcanzable (esperado) |
 
 > Nota: con el servidor AWS de Felipe (`100.31.110.6`) accesible y Mongo arriba,
@@ -282,7 +283,7 @@ Variables de entorno (opcionales):
 > garantiza porque `settings_test.py` apunta a `127.0.0.1:27017` que
 > normalmente está vacío.
 
-### ASR-Seg — Rate Limiting
+### ASR-Seg — Rate Limiting (smoke en serie)
 
 ```bash
 PYTHONIOENCODING=utf-8 uv run python experiments/measure_security_ratelimit.py
@@ -292,7 +293,60 @@ Bombardea `/api/monitor-servicios/health/` con `X-Forwarded-For: 10.0.0.99`,
 verifica transición 200 → 403 al sobrepasar el umbral, presencia en
 `/blocked/`, y que `POST /unblock/` libera la IP.
 
+Es un **smoke test**: hace 105 GETs **en serie**, prueba la correctitud
+pero NO la concurrencia. Para validar el comportamiento bajo carga real,
+usa el siguiente.
+
 Variables (opcionales): `ATTACKER_IP`, `TOTAL_REQUESTS`, `THRESHOLD`.
+
+### ASR-Seg — Rate Limiting bajo concurrencia (Locust)
+
+```bash
+PYTHONIOENCODING=utf-8 \
+USERS=30 SPAWN_RATE=15 RUN_TIME=10s \
+uv run python experiments/measure_security_concurrent_dos.py
+```
+
+Simula un atacante DoS **realista**: levanta `USERS` usuarios virtuales
+de Locust en paralelo (todos con el mismo `X-Forwarded-For`), martillando
+`/api/monitor-servicios/health/` durante `RUN_TIME`. Esto fuerza al
+middleware a manejar contención simultánea sobre `RequestLog` y
+`BlockedIP`.
+
+Verifica:
+
+- Total de requests `>` umbral → el atacante alcanzó a martillar.
+- `Failure Count` (HTTP 403) `>` 0 → el middleware bloqueó.
+- `Failure Count` ≥ `total - threshold - SLACK` (default slack=30) →
+  el bloqueo fue *casi inmediato*; el slack acomoda race conditions
+  donde varios requests cuelan entre el log y el `evaluate_ip`.
+- `max_ms` `<` 5000 → el sistema no se cayó bajo carga.
+- La IP aparece en `/blocked/`.
+- `POST /unblock/` la libera y un GET subsecuente vuelve a 200.
+
+Métrica real medida (30 users, 10 s en local): **2,797 reqs en 10 s
+(308 RPS)**, 2,669 → 403, 128 colados antes del bloqueo, max latency
+3.3 s. PASS.
+
+Variables (opcionales):
+
+- `USERS`         usuarios concurrentes (default `50`)
+- `SPAWN_RATE`    usuarios/segundo a crear (default `25`)
+- `RUN_TIME`      duración del ataque (default `15s`)
+- `THRESHOLD`     umbral del middleware (default `100`)
+- `SLACK`         margen aceptado por race conditions (default `30`)
+- `ATTACKER_IP`   IP del atacante (default `10.0.0.99`)
+
+> **Tip:** Para una **demo visual** con gráficas en tiempo real, corre
+> Locust en modo Web UI:
+>
+> ```bash
+> python -m locust -f experiments/locustfile_attacker.py \
+>     --host http://127.0.0.1:8000
+> ```
+>
+> Abre `http://127.0.0.1:8089`, configura users y spawn-rate, y observa
+> el RPS, latencias y failures en vivo.
 
 ### Salida de los scripts
 
@@ -356,9 +410,11 @@ Experimentos-Sprint-3/
 ├── experiments/                    # Scripts de medición de ASRs
 │   ├── _common.py                  # Helpers (BASE_URL, emit, ok, fail)
 │   ├── _seed_postgres_only.py      # Seed solo PG para modo testing
-│   ├── measure_heartbeat_monitoring.py    # Disp 01: Ping/Echo + Heartbeats
-│   ├── measure_graceful_degradation.py    # Disp 02: Fallar con gracia
-│   └── measure_security_ratelimit.py      # Seg: Rate Limiting
+│   ├── measure_heartbeat_monitoring.py     # Disp 01: Ping/Echo + Heartbeats
+│   ├── measure_graceful_degradation.py     # Disp 02: Fallar con gracia
+│   ├── measure_security_ratelimit.py       # Seg smoke (serie, 105 GETs)
+│   ├── measure_security_concurrent_dos.py  # Seg carga (Locust, concurrente)
+│   └── locustfile_attacker.py              # Definición Locust del atacante
 │
 ├── tests/
 │   └── test_recolector.py          # 71 tests de integración HTTP

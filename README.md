@@ -18,9 +18,9 @@ Monolito Django que evidencia dos ASRs.
 
 ### Seguridad
 
-| Táctica | Implementación | Métrica medida |
-|---|---|---|
-| Rate Limiting | `TrafficMonitorMiddleware` con umbral 100 reqs / 60 s | Bloqueo en req **#101** ✅ |
+| Táctica | Implementación | Métrica medida (smoke) | Métrica medida (carga) |
+|---|---|---|---|
+| Rate Limiting | `TrafficMonitorMiddleware` con umbral 100 reqs / 60 s | Bloqueo en req **#101** (serie) ✅ | **2,797 reqs / 10 s** (308 RPS, 30 users concurrentes), 2,669 → 403, 128 colados antes del bloqueo ✅ |
 
 ## Componentes
 
@@ -77,8 +77,13 @@ PYTHONIOENCODING=utf-8 \
 EXPERIMENT_BUSINESS_ID=11111111-1111-1111-1111-111111111111 \
 uv run python experiments/measure_graceful_degradation.py
 
-# Seguridad — Rate limiting (bloquea IPs que exceden 100 reqs/60s)
+# Seguridad (smoke) — rate limiting en serie (105 GETs)
 PYTHONIOENCODING=utf-8 uv run python experiments/measure_security_ratelimit.py
+
+# Seguridad (carga) — DoS concurrente con Locust (30 users en paralelo, 10s)
+PYTHONIOENCODING=utf-8 \
+USERS=30 SPAWN_RATE=15 RUN_TIME=10s \
+uv run python experiments/measure_security_concurrent_dos.py
 
 # Tests de integración del Recolector (Felipe — 71 checks)
 PYTHONIOENCODING=utf-8 uv run python tests/test_recolector.py
@@ -150,9 +155,11 @@ GET  /api/monitor-servicios/monitor/stale/
 ├── experiments/                 # Scripts de medición de ASRs
 │   ├── _common.py
 │   ├── _seed_postgres_only.py
-│   ├── measure_heartbeat_monitoring.py    # Disponibilidad 01 (Ping/Echo + Heartbeats)
-│   ├── measure_graceful_degradation.py    # Disponibilidad 02 (Fallar con gracia)
-│   └── measure_security_ratelimit.py      # Seguridad (Rate Limiting)
+│   ├── measure_heartbeat_monitoring.py     # Disp 01 (Ping/Echo + Heartbeats)
+│   ├── measure_graceful_degradation.py     # Disp 02 (Fallar con gracia)
+│   ├── measure_security_ratelimit.py       # Seg smoke (serie, 105 GETs)
+│   ├── measure_security_concurrent_dos.py  # Seg carga (Locust, concurrente)
+│   └── locustfile_attacker.py              # Definición del usuario Locust
 ├── tests/test_recolector.py     # 71 tests de integración HTTP
 └── setups/
     ├── setup-dbs.sh             # instala Postgres 16 + Mongo 8 (Ubuntu 24.04)
