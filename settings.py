@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     'monitor_trafico',
     'monitor_servicios',
     'generador_reportes.apps.GeneradorReportesConfig',
-    'recolector_inventarios',
+    'recolector_inventarios.apps.RecolectorInventariosConfig',
     'api_gateway',
 ]
 

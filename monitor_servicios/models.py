@@ -11,19 +11,35 @@ class ServiceRegistration(models.Model):
     is_active = models.BooleanField(default=True)
     registered_at = models.DateTimeField(auto_now_add=True)
 
+    # Timestamp del último heartbeat recibido (OK o no).
+    # Se actualiza con UPDATE en lugar de INSERT por cada heartbeat normal,
+    # evitando acumulación infinita de filas en la tabla Heartbeat.
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
         return self.name
 
 
 class Heartbeat(models.Model):
     """
-    Evento de heartbeat emitido por un servicio registrado.
+    Evento notable — solo se persiste cuando algo va mal o se recupera.
+
+    Se guarda:
+      - 'degraded'  : el servicio reportó estado degradado
+      - 'error'     : el servicio reportó error
+      - 'recovered' : el servicio volvió a OK tras haber estado en fallo
+      - 'timeout'   : el monitor detectó que el servicio dejó de responder
+
+    NO se guarda:
+      - 'ok' normal → solo actualiza last_heartbeat_at en ServiceRegistration
     """
 
     class Status(models.TextChoices):
-        OK = 'ok', 'OK'
-        DEGRADED = 'degraded', 'Degraded'
-        ERROR = 'error', 'Error'
+        OK        = 'ok',        'OK'
+        DEGRADED  = 'degraded',  'Degraded'
+        ERROR     = 'error',     'Error'
+        RECOVERED = 'recovered', 'Recovered'
+        TIMEOUT   = 'timeout',   'Timeout'
 
     service = models.ForeignKey(
         ServiceRegistration,
