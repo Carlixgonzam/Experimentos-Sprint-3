@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/api/monitor-servicios/health/,"ConnectionRefusedError(10061, '[WinError 10061] No connection could be made because the target machine actively refused it.')",538,2026-05-14T05:52:39Z,2026-05-14T05:53:06Z

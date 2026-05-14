@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/api/monitor-servicios/health/,HTTPError('403 Client Error: Forbidden for url: /api/monitor-servicios/health/'),2647,2026-05-14T06:22:50Z,2026-05-14T06:23:25Z
